@@ -89,7 +89,7 @@ jobs:
                           {"name": "Status", "value": "Infrastructure restored to desired state.", "inline": False},
                           {"name": "Trigger", "value": "👤 Manual — approved by ${{ github.actor }}", "inline": True},
                           {"name": "Estimated Monthly Cost", "value": f"\${total_cost}/month", "inline": True},
-                          {"name": "Time", "value": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "inline": True}
+                          {"name": "Time", "value": datetime.now(timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M:%S MYT'), "inline": True}
                       ]
                   }]
               }

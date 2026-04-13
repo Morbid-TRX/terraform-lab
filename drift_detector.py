@@ -2,7 +2,12 @@ import subprocess
 import json
 import urllib.request
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+MYT = timezone(timedelta(hours=8))
+
+def datetime.now(timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M:%S MYT'):
+    return datetime.now(MYT).strftime('%Y-%m-%d %H:%M:%S MYT')
 
 
 def run_terraform_plan():
@@ -68,7 +73,7 @@ def send_slack_alert(changes, exit_code):
                 "color": "good",
                 "fields": [
                     {"name": "Status", "value": "CLEAN — No drift detected. Infrastructure matches Terraform state.", "inline": False},
-                    {"name": "Scan Time", "value": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "inline": True},
+                    {"name": "Scan Time", "value": datetime.now(timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M:%S MYT'), "inline": True},
                     {"name": "Source", "value": source_value, "inline": True}
                 ]
             }]
@@ -82,7 +87,7 @@ def send_slack_alert(changes, exit_code):
                 "fields": [
                     {"name": "Status", "value": f"DRIFT DETECTED — {len(changes)} change(s) found", "inline": False},
                     {"name": "Changes", "value": changes_text, "inline": False},
-                    {"name": "Scan Time", "value": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "inline": True},
+                    {"name": "Scan Time", "value": datetime.now(timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M:%S MYT'), "inline": True},
                     {"name": "Source", "value": source_value, "inline": True},
                     {"name": "Action Required", "value": "Click below to approve remediation", "inline": False},
                     {"name": "Remediation Workflow", "value": "https://github.com/Morbid-TRX/terraform-lab/actions/workflows/remediate.yml", "inline": False}
@@ -182,7 +187,7 @@ def print_report(changes, exit_code):
     print("\n" + "="*50)
     print("       INFRASTRUCTURE DRIFT REPORT")
     print("="*50)
-    print(f"Scan Time : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"Scan Time : {datetime.now(timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M:%S MYT')}")
     print(f"Exit Code : {exit_code}")
     print("-"*50)
 
