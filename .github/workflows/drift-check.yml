@@ -22,7 +22,7 @@ jobs:
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
-        
+
       - name: Run tfsec security scan
         uses: aquasecurity/tfsec-action@v1.0.0
         with:
@@ -47,4 +47,6 @@ jobs:
         working-directory: environments/local
 
       - name: Run Drift Detector
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: python drift_detector.py
