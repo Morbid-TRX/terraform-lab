@@ -99,6 +99,51 @@ def send_slack_alert(changes, exit_code):
     except Exception as e:
         print(f"[ERROR] Failed to send Slack alert: {e}")
 
+def send_discord_alert(changes, exit_code):
+    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
+    if not webhook_url:
+        print("[INFO] No DISCORD_WEBHOOK_URL found, skipping Discord notification.")
+        return
+
+    if exit_code == 0:
+        message = {
+            "username": "TerraGuard",
+            "avatar_url": "https://www.terraform.io/favicon.ico",
+            "embeds": [{
+                "title": "✅ Infrastructure Drift Check",
+                "color": 3066993,
+                "fields": [
+                    {"name": "Status", "value": "CLEAN — No drift detected.", "inline": False},
+                    {"name": "Scan Time", "value": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "inline": True}
+                ]
+            }]
+        }
+    elif exit_code == 2:
+        changes_text = "\n".join([f"• [{c['type']}] {c['resource']}.{c['name']}" for c in changes])
+        message = {
+            "username": "TerraGuard",
+            "avatar_url": "https://www.terraform.io/favicon.ico",
+            "embeds": [{
+                "title": "🚨 Infrastructure Drift Detected!",
+                "color": 15158332,
+                "fields": [
+                    {"name": "Status", "value": f"DRIFT DETECTED — {len(changes)} change(s) found", "inline": False},
+                    {"name": "Changes", "value": changes_text, "inline": False},
+                    {"name": "Scan Time", "value": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "inline": True}
+                ]
+            }]
+        }
+    else:
+        return
+
+    data = json.dumps(message).encode("utf-8")
+    req = urllib.request.Request(webhook_url, data=data, headers={"Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(req)
+        print("[INFO] Discord alert sent successfully.")
+    except Exception as e:
+        print(f"[ERROR] Failed to send Discord alert: {e}")
+
 def print_report(changes, exit_code):
     print("\n" + "="*50)
     print("       INFRASTRUCTURE DRIFT REPORT")
@@ -127,6 +172,7 @@ def main():
     changes = parse_plan_output(result)
     print_report(changes, result.returncode)
     send_slack_alert(changes, result.returncode)
+    send_discord_alert(changes, result.returncode)
 
 if __name__ == "__main__":
     main()
