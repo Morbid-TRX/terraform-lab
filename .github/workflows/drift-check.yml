@@ -106,4 +106,31 @@ jobs:
               req = urllib.request.Request(webhook_url, data=data, headers={"Content-Type": "application/json"})
               urllib.request.urlopen(req)
               print("Slack notification sent.")
+
+      - name: Notify Slack - Pipeline Failed
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          python - <<EOF
+          import urllib.request, json, os
+          from datetime import datetime, timezone, timedelta
+          webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+          if webhook_url:
+              message = {
+                  "text": "❌ *Pipeline Failed!*",
+                  "attachments": [{
+                      "color": "danger",
+                      "fields": [
+                          {"name": "Workflow", "value": "${{ github.workflow }}", "inline": True},
+                          {"name": "Triggered by", "value": "${{ github.actor }}", "inline": True},
+                          {"name": "Run URL", "value": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}", "inline": False},
+                          {"name": "Time", "value": datetime.now(timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M:%S MYT'), "inline": True}
+                      ]
+                  }]
+              }
+              data = json.dumps(message).encode("utf-8")
+              req = urllib.request.Request(webhook_url, data=data, headers={"Content-Type": "application/json"})
+              urllib.request.urlopen(req)
+              print("Slack failure notification sent.")
           EOF
