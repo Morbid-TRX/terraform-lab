@@ -18,3 +18,25 @@ module "infrastructure" {
   subnet_cidr = "10.3.1.0/24"
   bucket_name = "aiman-terraform-aws-bucket"
 }
+
+module "iam_access_model" {
+  source = "../../modules/iam-access-model"
+
+  prefix         = "terraform-lab"
+  aws_region     = "ap-southeast-1"
+  aws_account_id = var.aws_account_id
+  dynamodb_table = "terraform-state-lock"
+
+  github_org  = "Morbid-TRX"
+  github_repo = "terraform-lab"
+
+  human_principal_arns = [
+    "arn:aws:iam::582165930795:root"
+  ]
+
+  tags = {
+    Project     = "terraform-lab"
+    Environment = "aws"
+    ManagedBy   = "terraform"
+  }
+}

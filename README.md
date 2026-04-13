@@ -14,6 +14,7 @@ Provisions AWS-compatible infrastructure across isolated dev, prod, local, and r
 - **Subnet** — public subnet within each VPC
 - **Security Group** — hardened ingress/egress rules (tfsec validated)
 - **S3 Bucket** — encrypted, versioned, public-access blocked object storage
+- **IAM Roles & Policies** — company-grade access model with Developer, CI/CD, Admin, and Auditor personas
 
 ## Environment Structure
 
@@ -55,14 +56,22 @@ terraform-lab/
 │   ├── prod/
 │   │   └── main.tf               # prod environment config
 │   └── aws/
-│       └── main.tf               # real AWS environment config
+│       ├── main.tf               # real AWS environment config (compute + IAM)
+│       └── variables.tf          # input variables
 ├── modules/
-│   └── compute/
-│       ├── main.tf               # reusable infrastructure module
-│       └── variables.tf          # module input variables
+│   ├── compute/
+│   │   ├── main.tf               # reusable infrastructure module
+│   │   └── variables.tf          # module input variables
+│   └── iam-access-model/
+│       ├── main.tf               # IAM roles, policies, and OIDC provider
+│       ├── variables.tf          # module input variables
+│       └── outputs.tf            # role ARN outputs
 ├── screenshots/
 │   ├── aws-s3-bucket.jpg
-│   └── aws-vpc.jpg
+│   ├── aws-vpc.jpg
+│   ├── aws-iam.jpg
+│   ├── aws-iam-developer-permissions.jpg
+│   └── aws-iam-cicd-trust.jpg
 ├── drift_detector.py             # scans for infrastructure drift + Slack alerts
 ├── drift_simulator.py            # simulates out-of-band infrastructure changes
 ├── .pre-commit-config.yaml       # pre-commit hooks for code quality
@@ -105,14 +114,64 @@ The system sends real-time Slack notifications for:
 
 All alerts include **source tracking** (Local Machine vs GitHub Actions) and **Malaysia Time (MYT)** timestamps.
 
+## IAM Access Model
+
+A company-grade IAM simulation built with Terraform, modelling how access is managed across multiple environments in a real organisation. Deployed to real AWS (ap-southeast-1) using the `iam-access-model` reusable module.
+
+### Personas & Access Scope
+
+| Role | local | dev | prod | aws | IAM |
+|------|-------|-----|------|-----|-----|
+| **Developer** | Full | Full | Read-only | Read-only | ❌ |
+| **CI/CD** | Full | Full | Full | Full | ❌ |
+| **Admin** | Full | Full | Full | Full | ✅ (scoped) |
+| **Auditor** | Read | Read | Read | Read | Read-only |
+
+### Roles Provisioned
+
+**terraform-lab-developer**
+Simulates a human engineer. Full Terraform apply access on `local` and `dev`. Read-only on `prod` and `aws`. DynamoDB lock restricted to `local/*` and `dev/*` keys — cannot lock prod state.
+
+**terraform-lab-cicd**
+Assumes role via GitHub Actions OIDC — no static AWS credentials stored anywhere. Scoped strictly to `repo:Morbid-TRX/terraform-lab:*`. Full deploy access across all environments plus drift detection read permissions.
+
+**terraform-lab-admin**
+Full access across all environments and resources. IAM management scoped to `terraform-lab-*` prefix only — cannot modify unrelated resources. Requires MFA to assume — enforced via trust policy condition.
+
+**terraform-lab-auditor**
+Read-only across all environments. Explicit `Deny` on all write actions — prevents privilege escalation even if a broader policy is accidentally attached.
+
+### Key Design Decisions
+
+- **OIDC over static keys** — CI/CD role is assumed via short-lived GitHub Actions token, no `AWS_ACCESS_KEY_ID` stored in secrets
+- **MFA enforcement** — Admin role trust policy requires `aws:MultiFactorAuthPresent: true`
+- **Explicit Deny on Auditor** — write actions are denied regardless of other attached policies
+- **DynamoDB lock scoping** — Developer cannot lock prod state, preventing accidental prod deploys
+- **IAM scoped by prefix** — Admin can only manage `terraform-lab-*` roles and policies
+
+### Proof of Deployment
+
+**IAM Roles on AWS:**
+![IAM Roles](screenshots/aws-iam.jpg)
+
+**Developer Role - Permissions:**
+![Developer Permissions](screenshots/aws-iam-developer-permissions.jpg)
+
+**CI/CD Role - Trust Relationships (OIDC):**
+![CI/CD Trust](screenshots/aws-iam-cicd-trust.jpg)
+
+> All IAM resources are free tier. Roles were provisioned and verified on real AWS, then destroyed to avoid any future drift.
+
 ## AWS Deployment Validation
 
-The same Terraform module was successfully deployed to **real AWS** (ap-southeast-1, Singapore) with zero code modifications — validating true cloud portability.
+The same Terraform modules were successfully deployed to **real AWS** (ap-southeast-1, Singapore) with zero code modifications — validating true cloud portability.
 
 Resources provisioned on AWS:
 - VPC (`10.3.0.0/16`) — ap-southeast-1
 - Subnet — ap-southeast-1a
 - S3 Bucket (`aiman-terraform-aws-bucket`) — ap-southeast-1
+- IAM Roles — Developer, CI/CD, Admin, Auditor
+- GitHub OIDC Provider
 
 > Infrastructure was provisioned and verified on AWS Free Tier, then destroyed to avoid charges.
 
@@ -129,6 +188,9 @@ Resources provisioned on AWS:
 - **tfsec** scans run automatically on every push
 - Security group rules restricted to VPC CIDR only (no public ingress)
 - S3 bucket hardened with encryption, versioning, and public access blocking
+- IAM roles follow least-privilege principle per environment and persona
+- CI/CD uses OIDC — no long-lived AWS credentials in GitHub secrets
+- Admin role requires MFA enforcement via trust policy
 - Branch protection rules enforce PR reviews and passing CI before merge
 - Pre-commit hooks block malformed or insecure code before it reaches GitHub
 
@@ -210,4 +272,5 @@ pre-commit install
 - Branch protection and pre-commit hooks for code quality enforcement
 - State management with S3 backend configuration for team collaboration
 - CI/CD pipeline integration with GitHub Actions
+- Company-grade IAM access model with least-privilege, OIDC, and MFA enforcement
 - Validated on real AWS Free Tier with zero code modifications
