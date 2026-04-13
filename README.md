@@ -24,15 +24,15 @@ Provisions a multi-resource AWS-compatible environment locally and detects confi
 ## Project Structure
 
 terraform-lab/
-├── environments/
-│   └── local/
-│       └── main.tf
-├── modules/
-│   └── compute/
-├── drift_detector.py
-├── drift_simulator.py
-├── .gitignore
-└── README.md
+environments/
+local/
+main.tf         # core infrastructure
+modules/
+compute/            # reusable module structure
+drift_detector.py       # scans for infrastructure drift
+drift_simulator.py      # simulates out-of-band changes
+.gitignore
+README.md
 
 ## How to Run
 
