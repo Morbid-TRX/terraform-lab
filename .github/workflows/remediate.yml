@@ -49,6 +49,18 @@ jobs:
         run: terraform apply -auto-approve
         working-directory: environments/local
 
+      - name: Run Infracost after remediation
+        uses: infracost/actions/setup@v3
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Generate cost report
+        run: |
+          infracost breakdown --path environments/local \
+            --format table \
+            --out-file infracost-report.txt
+          cat infracost-report.txt
+
       - name: Notify Slack - Remediation Complete
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
@@ -57,19 +69,32 @@ jobs:
           import urllib.request, json, os
           from datetime import datetime
           webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
-          message = {
-              "text": "🔧 *Terraform Remediation Complete*",
-              "attachments": [{
-                  "color": "good",
-                  "fields": [
-                      {"name": "Status", "value": "Infrastructure has been restored to desired state.", "inline": False},
-                      {"name": "Triggered by", "value": "${{ github.actor }}", "inline": True},
-                      {"name": "Time", "value": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "inline": True}
-                  ]
-              }]
-          }
-          data = json.dumps(message).encode("utf-8")
-          req = urllib.request.Request(webhook_url, data=data, headers={"Content-Type": "application/json"})
-          urllib.request.urlopen(req)
-          print("Slack notification sent.")
+          if webhook_url:
+              try:
+                  with open("infracost-report.txt", "r") as f:
+                      content = f.read()
+                  total_cost = "0.00"
+                  for line in content.split("\n"):
+                      if "OVERALL TOTAL" in line:
+                          parts = line.split("$")
+                          if len(parts) > 1:
+                              total_cost = parts[-1].strip()
+              except FileNotFoundError:
+                  total_cost = "N/A"
+              message = {
+                  "text": "🔧 *Manual Remediation Complete*",
+                  "attachments": [{
+                      "color": "good",
+                      "fields": [
+                          {"name": "Status", "value": "Infrastructure restored to desired state.", "inline": False},
+                          {"name": "Trigger", "value": "👤 Manual — approved by ${{ github.actor }}", "inline": True},
+                          {"name": "Estimated Monthly Cost", "value": f"\${total_cost}/month", "inline": True},
+                          {"name": "Time", "value": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "inline": True}
+                      ]
+                  }]
+              }
+              data = json.dumps(message).encode("utf-8")
+              req = urllib.request.Request(webhook_url, data=data, headers={"Content-Type": "application/json"})
+              urllib.request.urlopen(req)
+              print("Slack notification sent.")
           EOF

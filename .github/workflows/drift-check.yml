@@ -79,12 +79,25 @@ jobs:
           from datetime import datetime
           webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
           if webhook_url:
+              try:
+                  with open("infracost-report.txt", "r") as f:
+                      content = f.read()
+                  total_cost = "0.00"
+                  for line in content.split("\n"):
+                      if "OVERALL TOTAL" in line:
+                          parts = line.split("$")
+                          if len(parts) > 1:
+                              total_cost = parts[-1].strip()
+              except FileNotFoundError:
+                  total_cost = "N/A"
               message = {
                   "text": "🔧 *Auto Remediation Complete (Scheduled)*",
                   "attachments": [{
                       "color": "good",
                       "fields": [
                           {"name": "Status", "value": "Infrastructure automatically restored to desired state.", "inline": False},
+                          {"name": "Trigger", "value": "⏰ Scheduled (automatic)", "inline": True},
+                          {"name": "Estimated Monthly Cost", "value": f"\${total_cost}/month", "inline": True},
                           {"name": "Time", "value": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "inline": True}
                       ]
                   }]
