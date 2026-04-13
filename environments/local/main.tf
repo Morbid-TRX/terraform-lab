@@ -56,6 +56,30 @@ resource "aws_s3_bucket_public_access_block" "my_bucket_public_access" {
   restrict_public_buckets = true
 }
 
+resource "aws_s3_bucket_policy" "my_bucket_ssl" {
+  bucket = aws_s3_bucket.my_bucket.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "DenyNonSSL"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          aws_s3_bucket.my_bucket.arn,
+          "${aws_s3_bucket.my_bucket.arn}/*"
+        ]
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      }
+    ]
+  })
+}
+
 resource "aws_vpc" "my_vpc" {
   cidr_block = var.vpc_cidr
 

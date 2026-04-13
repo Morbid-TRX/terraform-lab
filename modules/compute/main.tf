@@ -16,6 +16,30 @@ resource "aws_s3_bucket" "bucket" {
   }, var.tags)
 }
 
+resource "aws_s3_bucket_policy" "bucket_ssl" {
+  bucket = aws_s3_bucket.bucket.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "DenyNonSSL"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          aws_s3_bucket.bucket.arn,
+          "${aws_s3_bucket.bucket.arn}/*"
+        ]
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      }
+    ]
+  })
+}
+
 resource "aws_vpc" "vpc" {
   cidr_block = var.vpc_cidr
   tags = merge({
