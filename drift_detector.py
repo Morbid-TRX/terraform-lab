@@ -4,22 +4,24 @@ import urllib.request
 import os
 from datetime import datetime
 
+
 def run_terraform_plan():
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Running terraform plan...")
-    
+
     result = subprocess.run(
         ["terraform", "plan", "-json", "-detailed-exitcode"],
         cwd="environments/local",
         capture_output=True,
         text=True
     )
-    
+
     return result
+
 
 def parse_plan_output(result):
     changes = []
     lines = result.stdout.strip().split("\n")
-    
+
     for line in lines:
         try:
             data = json.loads(line)
@@ -42,8 +44,9 @@ def parse_plan_output(result):
                     })
         except json.JSONDecodeError:
             continue
-    
+
     return changes
+
 
 def send_slack_alert(changes, exit_code):
     webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
@@ -51,20 +54,23 @@ def send_slack_alert(changes, exit_code):
         print("[INFO] No SLACK_WEBHOOK_URL found, skipping Slack notification.")
         return
 
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        source = f"GitHub Actions — triggered by {os.environ.get('GITHUB_ACTOR', 'unknown')}"
+        run_url = f"https://github.com/{os.environ.get('GITHUB_REPOSITORY')}/actions/runs/{os.environ.get('GITHUB_RUN_ID')}"
+        source_value = f"<{run_url}|{source}>"
+    else:
+        source_value = "🖥️ Local Machine"
+
     if exit_code == 0:
         message = {
             "text": "✅ *Infrastructure Drift Check*",
             "attachments": [{
                 "color": "good",
-                "fields": [{
-                    "title": "Status",
-                    "value": "CLEAN — No drift detected. Infrastructure matches Terraform state.",
-                    "short": False
-                }, {
-                    "title": "Scan Time",
-                    "value": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    "short": True
-                }]
+                "fields": [
+                    {"name": "Status", "value": "CLEAN — No drift detected. Infrastructure matches Terraform state.", "inline": False},
+                    {"name": "Scan Time", "value": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "inline": True},
+                    {"name": "Source", "value": source_value, "inline": True}
+                ]
             }]
         }
     elif exit_code == 2:
@@ -73,19 +79,14 @@ def send_slack_alert(changes, exit_code):
             "text": "🚨 *Infrastructure Drift Detected!*",
             "attachments": [{
                 "color": "danger",
-                "fields": [{
-                    "title": "Status",
-                    "value": f"DRIFT DETECTED — {len(changes)} change(s) found",
-                    "short": False
-                }, {
-                    "title": "Changes",
-                    "value": changes_text,
-                    "short": False
-                }, {
-                    "title": "Scan Time",
-                    "value": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    "short": True
-                }]
+                "fields": [
+                    {"name": "Status", "value": f"DRIFT DETECTED — {len(changes)} change(s) found", "inline": False},
+                    {"name": "Changes", "value": changes_text, "inline": False},
+                    {"name": "Scan Time", "value": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "inline": True},
+                    {"name": "Source", "value": source_value, "inline": True},
+                    {"name": "Action Required", "value": "Click below to approve remediation", "inline": False},
+                    {"name": "Remediation Workflow", "value": "https://github.com/Morbid-TRX/terraform-lab/actions/workflows/remediate.yml", "inline": False}
+                ]
             }]
         }
     else:
@@ -99,48 +100,83 @@ def send_slack_alert(changes, exit_code):
     except Exception as e:
         print(f"[ERROR] Failed to send Slack alert: {e}")
 
-def send_discord_alert(changes, exit_code):
-    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
-    if not webhook_url:
-        print("[INFO] No DISCORD_WEBHOOK_URL found, skipping Discord notification.")
+
+def auto_remediate(exit_code):
+    if exit_code != 2:
         return
 
-    if exit_code == 0:
-        message = {
-            "username": "TerraGuard",
-            "avatar_url": "https://www.terraform.io/favicon.ico",
-            "embeds": [{
-                "title": "✅ Infrastructure Drift Check",
-                "color": 3066993,
-                "fields": [
-                    {"name": "Status", "value": "CLEAN — No drift detected.", "inline": False},
-                    {"name": "Scan Time", "value": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "inline": True}
-                ]
-            }]
-        }
-    elif exit_code == 2:
-        changes_text = "\n".join([f"• [{c['type']}] {c['resource']}.{c['name']}" for c in changes])
-        message = {
-            "text": "🚨 *Infrastructure Drift Detected!*",
-            "attachments": [{
-                "color": "danger",
-                "fields": [
-                    {"name": "Status", "value": f"DRIFT DETECTED — {len(changes)} change(s) found", "inline": False},
-                    {"name": "Changes", "value": changes_text, "inline": False},
-                    {"name": "Scan Time", "value": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "inline": True}
-                ]
-            }]
-        }
+    print("\n" + "="*50)
+    print("       AUTO REMEDIATION")
+    print("="*50)
+    print("Drift detected — triggering auto-remediation...")
+
+    result = subprocess.run(
+        ["terraform", "apply", "-auto-approve"],
+        cwd="environments/local",
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode == 0:
+        print("✓ Remediation successful! Infrastructure restored.")
+        print(result.stdout)
     else:
+        print("✗ Remediation failed!")
+        print(result.stderr)
+
+    print("="*50 + "\n")
+
+
+def check_cost_threshold():
+    webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+    if not webhook_url:
         return
 
-    data = json.dumps(message).encode("utf-8")
-    req = urllib.request.Request(webhook_url, data=data, headers={"Content-Type": "application/json"})
+    print("[INFO] Checking Infracost report for cost threshold...")
+
     try:
-        urllib.request.urlopen(req)
-        print("[INFO] Discord alert sent successfully.")
-    except Exception as e:
-        print(f"[ERROR] Failed to send Discord alert: {e}")
+        with open("infracost-report.txt", "r") as f:
+            content = f.read()
+    except FileNotFoundError:
+        print("[INFO] No infracost report found, skipping cost check.")
+        return
+
+    threshold = 10.0
+    total_cost = 0.0
+
+    for line in content.split("\n"):
+        if "OVERALL TOTAL" in line:
+            parts = line.split("$")
+            if len(parts) > 1:
+                try:
+                    total_cost = float(parts[-1].strip())
+                except ValueError:
+                    pass
+
+    print(f"[INFO] Estimated monthly cost: ${total_cost:.2f}")
+
+    if total_cost > threshold:
+        message = {
+            "text": "💸 *Cost Threshold Exceeded!*",
+            "attachments": [{
+                "color": "warning",
+                "fields": [
+                    {"name": "Estimated Monthly Cost", "value": f"${total_cost:.2f}", "inline": True},
+                    {"name": "Threshold", "value": f"${threshold:.2f}", "inline": True},
+                    {"name": "Action Required", "value": "Review your infrastructure for cost optimization.", "inline": False}
+                ]
+            }]
+        }
+        data = json.dumps(message).encode("utf-8")
+        req = urllib.request.Request(webhook_url, data=data, headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req)
+            print("[INFO] Cost threshold alert sent to Slack.")
+        except Exception as e:
+            print(f"[ERROR] Failed to send cost alert: {e}")
+    else:
+        print(f"[INFO] Cost is within threshold (${threshold:.2f}/month).")
+
 
 def print_report(changes, exit_code):
     print("\n" + "="*50)
@@ -149,7 +185,7 @@ def print_report(changes, exit_code):
     print(f"Scan Time : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Exit Code : {exit_code}")
     print("-"*50)
-    
+
     if exit_code == 0:
         print("STATUS    : CLEAN ✓")
         print("          No drift detected. Infrastructure")
@@ -162,14 +198,18 @@ def print_report(changes, exit_code):
     else:
         print("STATUS    : ERROR")
         print("          Could not complete drift check.")
-    
+
     print("="*50 + "\n")
+
 
 def main():
     result = run_terraform_plan()
     changes = parse_plan_output(result)
     print_report(changes, result.returncode)
     send_slack_alert(changes, result.returncode)
+    auto_remediate(result.returncode)
+    check_cost_threshold()
+
 
 if __name__ == "__main__":
     main()
