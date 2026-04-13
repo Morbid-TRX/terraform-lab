@@ -1,5 +1,7 @@
 # Terraform Infrastructure Lab
 
+[![Infrastructure Drift Check](https://github.com/Morbid-TRX/terraform-lab/actions/workflows/drift-check.yml/badge.svg)](https://github.com/Morbid-TRX/terraform-lab/actions/workflows/drift-check.yml)
+
 A multi-environment cloud infrastructure project using Terraform and LocalStack, featuring automated drift detection, drift simulation, and a GitHub Actions CI pipeline.
 
 ## What This Project Does
