@@ -22,7 +22,12 @@ jobs:
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
-
+        
+      - name: Run tfsec security scan
+        uses: aquasecurity/tfsec-action@v1.0.0
+        with:
+          working_directory: environments/local
+          soft_fail: true
       - name: Start LocalStack
         run: |
           pip install localstack
