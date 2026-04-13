@@ -21,6 +21,17 @@ Provisions AWS-compatible infrastructure locally across isolated dev, prod, and 
 | dev | 10.1.0.0/16 | dev-terraform-bucket |
 | prod | 10.2.0.0/16 | prod-terraform-bucket |
 
+## AWS Deployment Validation
+
+The same Terraform module was successfully deployed to **real AWS** (ap-southeast-1, Singapore) with zero code modifications — validating true cloud portability.
+
+Resources provisioned on AWS:
+- VPC (`10.3.0.0/16`) — ap-southeast-1
+- Subnet — ap-southeast-1a
+- S3 Bucket (`aiman-terraform-aws-bucket`) — ap-southeast-1
+
+> Infrastructure was provisioned and verified on AWS Free Tier, then destroyed to avoid charges.
+
 ## Tools & Technologies
 
 - **Terraform** — Infrastructure as Code
