@@ -61,4 +61,36 @@ jobs:
       - name: Run Drift Detector
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          TRIGGER_EVENT: ${{ github.event_name }}
         run: python drift_detector.py
+
+      - name: Auto Remediate (scheduled only)
+        if: github.event_name == 'schedule'
+        working-directory: environments/local
+        run: terraform apply -auto-approve
+        
+      - name: Notify Slack - Auto Remediation Complete
+        if: github.event_name == 'schedule'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          python - <<EOF
+          import urllib.request, json, os
+          from datetime import datetime
+          webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+          if webhook_url:
+              message = {
+                  "text": "🔧 *Auto Remediation Complete (Scheduled)*",
+                  "attachments": [{
+                      "color": "good",
+                      "fields": [
+                          {"name": "Status", "value": "Infrastructure automatically restored to desired state.", "inline": False},
+                          {"name": "Time", "value": datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "inline": True}
+                      ]
+                  }]
+              }
+              data = json.dumps(message).encode("utf-8")
+              req = urllib.request.Request(webhook_url, data=data, headers={"Content-Type": "application/json"})
+              urllib.request.urlopen(req)
+              print("Slack notification sent.")
+          EOF

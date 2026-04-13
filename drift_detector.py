@@ -207,9 +207,7 @@ def main():
     changes = parse_plan_output(result)
     print_report(changes, result.returncode)
     send_slack_alert(changes, result.returncode)
-    auto_remediate(result.returncode)
     check_cost_threshold()
-
 
 if __name__ == "__main__":
     main()
