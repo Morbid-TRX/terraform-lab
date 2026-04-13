@@ -172,7 +172,6 @@ def main():
     changes = parse_plan_output(result)
     print_report(changes, result.returncode)
     send_slack_alert(changes, result.returncode)
-    send_discord_alert(changes, result.returncode)
 
 if __name__ == "__main__":
     main()
