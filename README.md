@@ -32,6 +32,14 @@ Resources provisioned on AWS:
 
 > Infrastructure was provisioned and verified on AWS Free Tier, then destroyed to avoid charges.
 
+### Proof of Deployment
+
+**S3 Bucket on AWS:**
+![S3 Bucket](screenshots/AWS_S3_Bucket_Terraform.jpg)
+
+**VPC on AWS:**
+![VPC](screenshots/AWS_VPC_Terraform.jpg)
+
 ## Tools & Technologies
 
 - **Terraform** — Infrastructure as Code
