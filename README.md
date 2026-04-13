@@ -90,6 +90,10 @@ Every push to `main` and daily at 8:00 AM UTC triggers the full pipeline:
 | Push to main | Require manual approval via GitHub Actions |
 | Manual workflow dispatch | Require manual approval via GitHub Actions |
 
+Remediation restores infrastructure to the **desired state as defined in code** (`main.tf`) — not a previous snapshot. This means if a resource was manually deleted or modified outside of Terraform, it gets recreated or reverted to match the code.
+
+> **Note:** True version rollback (restoring to a specific previous state) requires the S3 backend with state versioning enabled — the configuration for this is documented in the [State Management](#state-management) section. Without it, remediation always targets the current code definition, not a historical state.
+
 ## Slack Alerts
 
 The system sends real-time Slack notifications for:
