@@ -121,11 +121,9 @@ def send_discord_alert(changes, exit_code):
     elif exit_code == 2:
         changes_text = "\n".join([f"• [{c['type']}] {c['resource']}.{c['name']}" for c in changes])
         message = {
-            "username": "TerraGuard",
-            "avatar_url": "https://www.terraform.io/favicon.ico",
-            "embeds": [{
-                "title": "🚨 Infrastructure Drift Detected!",
-                "color": 15158332,
+            "text": "🚨 *Infrastructure Drift Detected!*",
+            "attachments": [{
+                "color": "danger",
                 "fields": [
                     {"name": "Status", "value": f"DRIFT DETECTED — {len(changes)} change(s) found", "inline": False},
                     {"name": "Changes", "value": changes_text, "inline": False},
