@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 
 MYT = timezone(timedelta(hours=8))
 
-def datetime.now(timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M:%S MYT'):
+def now_myt():
     return datetime.now(MYT).strftime('%Y-%m-%d %H:%M:%S MYT')
 
 
