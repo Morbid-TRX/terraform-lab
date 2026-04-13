@@ -61,8 +61,8 @@ terraform-lab/
 │       ├── main.tf               # reusable infrastructure module
 │       └── variables.tf          # module input variables
 ├── screenshots/
-│   ├── AWS_S3_Bucket_Terraform.jpg
-│   └── AWS_VPC_Terraform.jpg
+│   ├── aws-s3-bucket.jpg
+│   └── aws-vpc.jpg
 ├── drift_detector.py             # scans for infrastructure drift + Slack alerts
 ├── drift_simulator.py            # simulates out-of-band infrastructure changes
 ├── .pre-commit-config.yaml       # pre-commit hooks for code quality
