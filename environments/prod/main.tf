@@ -27,4 +27,8 @@ module "infrastructure" {
   vpc_cidr    = "10.2.0.0/16"
   subnet_cidr = "10.2.1.0/24"
   bucket_name = "prod-terraform-bucket"
+  tags = {
+    Environment = "Prod"
+    Service     = "terraform-lab"
+  }
 }

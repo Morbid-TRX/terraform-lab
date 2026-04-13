@@ -26,7 +26,8 @@ resource "aws_s3_bucket" "my_bucket" {
 
   tags = {
     Name        = var.bucket_name
-    Environment = var.environment
+    Environment = "Dev"
+    Service     = "terraform-lab"
     ManagedBy   = "terraform"
   }
 }
@@ -60,7 +61,8 @@ resource "aws_vpc" "my_vpc" {
 
   tags = {
     Name        = "my-terraform-vpc"
-    Environment = var.environment
+    Environment = "Dev"
+    Service     = "terraform-lab"
     ManagedBy   = "terraform"
   }
 }
@@ -72,7 +74,8 @@ resource "aws_subnet" "my_subnet" {
 
   tags = {
     Name        = "my-terraform-subnet"
-    Environment = var.environment
+    Environment = "Dev"
+    Service     = "terraform-lab"
     ManagedBy   = "terraform"
   }
 }
@@ -108,7 +111,8 @@ resource "aws_security_group" "my_sg" {
 
   tags = {
     Name        = "my-terraform-sg"
-    Environment = var.environment
+    Environment = "Dev"
+    Service     = "terraform-lab"
     ManagedBy   = "terraform"
   }
 }
