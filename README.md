@@ -115,10 +115,10 @@ Resources provisioned on AWS:
 ### Proof of Deployment
 
 **S3 Bucket on AWS:**
-![S3 Bucket](screenshots/AWS_S3_Bucket_Terraform.jpg)
+![S3 Bucket](screenshots/aws-s3-bucket.jpg)
 
 **VPC on AWS:**
-![VPC](screenshots/AWS_VPC_Terraform.jpg)
+![VPC](screenshots/aws-vpc.jpg)
 
 ## Security
 
