@@ -23,7 +23,7 @@ resource "aws_vpc" "vpc" {
 resource "aws_subnet" "subnet" {
   vpc_id            = aws_vpc.vpc.id
   cidr_block        = var.subnet_cidr
-  availability_zone = "us-east-1a"
+  availability_zone = "ap-southeast-1a"
   tags = {
     Name        = "${var.environment}-subnet"
     Environment = var.environment
