@@ -63,12 +63,17 @@ terraform-lab/
 │   │   └── outputs.tf          # resource outputs
 │   ├── dev/
 │   │   └── main.tf             # dev environment config
-│   └── prod/
-│       └── main.tf             # prod environment config
+│   ├── prod/
+│   │   └── main.tf             # prod environment config
+│   └── aws/
+│       └── main.tf             # real AWS environment config
 ├── modules/
 │   └── compute/
 │       ├── main.tf             # reusable infrastructure module
 │       └── variables.tf        # module input variables
+├── screenshots/
+│   ├── AWS_S3_Bucket_Terraform.jpg
+│   └── AWS_VPC_Terraform.jpg
 ├── drift_detector.py           # scans for infrastructure drift
 ├── drift_simulator.py          # simulates out-of-band changes
 ├── .gitignore
@@ -90,6 +95,14 @@ docker run -d -p 4566:4566 -p 4510-4559:4510-4559 \
 cd environments/local   # or dev, or prod
 terraform init
 terraform apply
+```
+
+**For real AWS deployment:**
+```bash
+cd environments/aws
+terraform init
+terraform apply
+terraform destroy  # always destroy after to avoid charges
 ```
 
 ### 3. Run Drift Detection
