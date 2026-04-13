@@ -26,7 +26,8 @@ resource "aws_s3_bucket" "my_bucket" {
 
   tags = {
     Name        = var.bucket_name
-    Environment = var.environment
+    Environment = "Dev"
+    Service     = "terraform-lab"
     ManagedBy   = "terraform"
   }
 }
@@ -55,12 +56,37 @@ resource "aws_s3_bucket_public_access_block" "my_bucket_public_access" {
   restrict_public_buckets = true
 }
 
+resource "aws_s3_bucket_policy" "my_bucket_ssl" {
+  bucket = aws_s3_bucket.my_bucket.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "DenyNonSSL"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          aws_s3_bucket.my_bucket.arn,
+          "${aws_s3_bucket.my_bucket.arn}/*"
+        ]
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      }
+    ]
+  })
+}
+
 resource "aws_vpc" "my_vpc" {
   cidr_block = var.vpc_cidr
 
   tags = {
     Name        = "my-terraform-vpc"
-    Environment = var.environment
+    Environment = "Dev"
+    Service     = "terraform-lab"
     ManagedBy   = "terraform"
   }
 }
@@ -72,7 +98,8 @@ resource "aws_subnet" "my_subnet" {
 
   tags = {
     Name        = "my-terraform-subnet"
-    Environment = var.environment
+    Environment = "Dev"
+    Service     = "terraform-lab"
     ManagedBy   = "terraform"
   }
 }
@@ -108,7 +135,8 @@ resource "aws_security_group" "my_sg" {
 
   tags = {
     Name        = "my-terraform-sg"
-    Environment = var.environment
+    Environment = "Dev"
+    Service     = "terraform-lab"
     ManagedBy   = "terraform"
   }
 }

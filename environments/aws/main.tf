@@ -17,6 +17,10 @@ module "infrastructure" {
   vpc_cidr    = "10.3.0.0/16"
   subnet_cidr = "10.3.1.0/24"
   bucket_name = "aiman-terraform-aws-bucket"
+  tags = {
+    Environment = "Prod"
+    Service     = "terraform-lab"
+  }
 }
 
 module "iam_access_model" {
@@ -36,7 +40,8 @@ module "iam_access_model" {
 
   tags = {
     Project     = "terraform-lab"
-    Environment = "aws"
+    Environment = "Prod"
+    Service     = "terraform-lab"
     ManagedBy   = "terraform"
   }
 }
