@@ -22,24 +22,34 @@ provider "aws" {
 }
 
 resource "aws_s3_bucket" "my_bucket" {
-  bucket = "my-terraform-bucket"
+  bucket = var.bucket_name
+
+  tags = {
+    Name        = var.bucket_name
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  }
 }
 
 resource "aws_vpc" "my_vpc" {
-  cidr_block = "10.0.0.0/16"
+  cidr_block = var.vpc_cidr
 
   tags = {
-    Name = "my-terraform-vpc"
+    Name        = "my-terraform-vpc"
+    Environment = var.environment
+    ManagedBy   = "terraform"
   }
 }
 
 resource "aws_subnet" "my_subnet" {
   vpc_id            = aws_vpc.my_vpc.id
-  cidr_block        = "10.0.1.0/24"
+  cidr_block        = var.subnet_cidr
   availability_zone = "us-east-1a"
 
   tags = {
-    Name = "my-terraform-subnet"
+    Name        = "my-terraform-subnet"
+    Environment = var.environment
+    ManagedBy   = "terraform"
   }
 }
 
@@ -52,7 +62,7 @@ resource "aws_security_group" "my_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/16"]
+    cidr_blocks = [var.vpc_cidr]
     description = "Allow SSH from within VPC"
   }
 
@@ -74,7 +84,7 @@ resource "aws_security_group" "my_sg" {
 
   tags = {
     Name        = "my-terraform-sg"
-    Environment = "local"
+    Environment = var.environment
     ManagedBy   = "terraform"
   }
 }
