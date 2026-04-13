@@ -1,5 +1,7 @@
 # Terraform Infrastructure Lab
 
+Test Branch Protection
+
 [![Infrastructure Drift Check](https://github.com/Morbid-TRX/terraform-lab/actions/workflows/drift-check.yml/badge.svg)](https://github.com/Morbid-TRX/terraform-lab/actions/workflows/drift-check.yml)
 
 A production-grade, multi-environment cloud infrastructure project built with Terraform and LocalStack — featuring automated drift detection, smart remediation, security scanning, cost estimation, and real-time Slack alerting via a fully automated CI/CD pipeline.
