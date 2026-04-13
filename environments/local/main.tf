@@ -31,6 +31,30 @@ resource "aws_s3_bucket" "my_bucket" {
   }
 }
 
+resource "aws_s3_bucket_versioning" "my_bucket_versioning" {
+  bucket = aws_s3_bucket.my_bucket.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "my_bucket_encryption" {
+  bucket = aws_s3_bucket.my_bucket.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "my_bucket_public_access" {
+  bucket                  = aws_s3_bucket.my_bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 resource "aws_vpc" "my_vpc" {
   cidr_block = var.vpc_cidr
 
@@ -63,23 +87,23 @@ resource "aws_security_group" "my_sg" {
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = [var.vpc_cidr]
-    description = "Allow SSH from within VPC"
+    description = "Allow SSH from within VPC only"
   }
 
   ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow HTTP"
+    cidr_blocks = [var.vpc_cidr]
+    description = "Allow HTTP from within VPC only"
   }
 
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow all outbound"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+    description = "Allow HTTPS outbound within VPC only"
   }
 
   tags = {
