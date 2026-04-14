@@ -1,0 +1,4 @@
+# Copy this file to terraform.tfvars and fill in your values
+# Never commit terraform.tfvars to version control
+
+aws_account_id = "YOUR_AWS_ACCOUNT_ID"
