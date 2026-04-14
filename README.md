@@ -216,6 +216,26 @@ Terraform state is managed locally by default. For production team use, an S3 ba
 - Python 3.x
 - LocalStack account (free tier)
 - AWS account (free tier, optional)
+- aws-vault (for secure local AWS credential management)
+
+### Local AWS Credential Setup (aws-vault)
+
+Instead of storing AWS credentials as environment variables, use aws-vault to store them securely in your OS keychain:
+
+1. Download aws-vault from **https://github.com/99designs/aws-vault/releases**
+2. Move to `C:\terraform\` and add to PATH
+3. Add your credentials:
+```bash
+   aws-vault add terraform-lab
+```
+4. Run Terraform commands via aws-vault:
+```bash
+   aws-vault exec terraform-lab -- terraform plan
+   aws-vault exec terraform-lab -- terraform apply
+   aws-vault exec terraform-lab -- terraform destroy
+```
+
+> Never use `setx AWS_ACCESS_KEY_ID` or hardcode credentials in any file. aws-vault stores credentials encrypted in Windows Credential Manager.
 
 ### 1. Start LocalStack
 ```bash
