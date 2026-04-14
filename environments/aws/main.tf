@@ -35,7 +35,7 @@ module "iam_access_model" {
   github_repo = "terraform-lab"
 
   human_principal_arns = [
-    "arn:aws:iam::582165930795:root"
+    "arn:aws:iam::${var.aws_account_id}:root"
   ]
 
   tags = {
