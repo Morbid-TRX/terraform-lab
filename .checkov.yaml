@@ -1,0 +1,24 @@
+# Checkov configuration
+# Docs: https://www.checkov.io/2.Basics/CLI%20Command%20Reference.html
+
+framework:
+  - terraform
+
+# Skip paths that should never be scanned
+skip-path:
+  - .terraform
+  - .git
+  - screenshots
+  - .github  # workflows don't have IaC to scan
+
+# Quiet mode — only show failed checks and summary in CI
+quiet: true
+
+# Show compact output (less verbose per-check details)
+compact: true
+
+# Show download URL of the policy documentation
+download-external-modules: false
+
+# Output formats
+output: cli

@@ -42,6 +42,17 @@ jobs:
         with:
           working_directory: environments/local
           soft_fail: true
+
+      - name: Run Checkov IaC scan
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: terraform
+          quiet: true
+          compact: true
+          soft_fail: false
+          config_file: .checkov.yaml
+
       - name: Start LocalStack
         run: |
           pip install localstack
