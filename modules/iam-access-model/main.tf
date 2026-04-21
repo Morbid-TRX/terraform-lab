@@ -38,6 +38,8 @@ resource "aws_iam_role" "developer" {
 }
 
 data "aws_iam_policy_document" "developer" {
+  # checkov:skip=CKV_AWS_356: ec2:Describe* actions require Resource="*" per AWS IAM spec — describe actions do not support resource-level permissions. Scoped to region via aws:RequestedRegion condition.
+
   # Full S3 access to dev/local buckets
   statement {
     sid       = "DevS3Full"
@@ -164,6 +166,10 @@ data "aws_iam_policy_document" "assume_github_oidc" {
 }
 
 data "aws_iam_policy_document" "cicd" {
+  # checkov:skip=CKV_AWS_109: CI/CD role intentionally has broad permissions to manage Terraform-provisioned infrastructure across all envs. Scoped via GitHub OIDC trust policy (repo:Morbid-TRX/terraform-lab:*).
+  # checkov:skip=CKV_AWS_111: Write access required for Terraform apply operations. Access is bounded by OIDC federation — no static credentials exist.
+  # checkov:skip=CKV_AWS_356: EC2/S3 Describe and CreateTags actions require Resource="*" per AWS IAM spec. Terraform operations inherently need broad resource access within scoped account.
+
   # Full state access across all environments
   statement {
     sid       = "CICDS3StateAll"
@@ -246,6 +252,11 @@ resource "aws_iam_role" "admin" {
 }
 
 data "aws_iam_policy_document" "admin" {
+  # checkov:skip=CKV_AWS_107: Admin role intentionally has credential-related permissions (iam:PassRole) for infrastructure management. MFA required via assume_human_mfa trust policy.
+  # checkov:skip=CKV_AWS_109: Admin role is the break-glass persona with full management access. Scoped to terraform-lab-* resources for IAM; MFA-gated assumption.
+  # checkov:skip=CKV_AWS_111: Admin role requires write access by design (ec2:*, s3:*, dynamodb:*). MFA required; usage audited via CloudTrail.
+  # checkov:skip=CKV_AWS_356: ec2:* and s3:* actions require Resource="*" for the admin persona. Access gated by MFA requirement in trust policy.
+
   # Full S3 state access
   statement {
     sid       = "AdminS3Full"
@@ -313,6 +324,9 @@ resource "aws_iam_role" "auditor" {
 }
 
 data "aws_iam_policy_document" "auditor" {
+  # checkov:skip=CKV_AWS_107: Auditor has iam:Get*/iam:List* for read-only auditing — required to review IAM posture. Explicit Deny statement blocks all writes including credential modification.
+  # checkov:skip=CKV_AWS_356: Read-only Describe/Get/List actions require Resource="*" per AWS IAM spec. Explicit Deny statement in same policy prevents any write actions.
+
   statement {
     sid    = "AuditorS3ReadOnly"
     effect = "Allow"

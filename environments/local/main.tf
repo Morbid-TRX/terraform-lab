@@ -22,6 +22,11 @@ provider "aws" {
 }
 
 resource "aws_s3_bucket" "my_bucket" {
+  # checkov:skip=CKV_AWS_18: Access logging adds S3 storage cost; not justified for LocalStack lab
+  # checkov:skip=CKV_AWS_144: Cross-region replication not applicable to LocalStack single-endpoint setup
+  # checkov:skip=CKV_AWS_145: KMS CMK costs $1/key/month; AES256 SSE enforced via aws_s3_bucket_server_side_encryption_configuration below
+  # checkov:skip=CKV2_AWS_61: Lifecycle configuration deferred to TODO #8 (lifecycle rules on critical resources)
+  # checkov:skip=CKV2_AWS_62: Event notifications have no consumers in this lab; not applicable
   bucket = var.bucket_name
 
   tags = {
@@ -81,6 +86,8 @@ resource "aws_s3_bucket_policy" "my_bucket_ssl" {
 }
 
 resource "aws_vpc" "my_vpc" {
+  # checkov:skip=CKV2_AWS_11: VPC flow logging adds CloudWatch Logs cost; not available in LocalStack free tier
+  # checkov:skip=CKV2_AWS_12: Default SG unused — all traffic routed through explicit aws_security_group.my_sg below
   cidr_block = var.vpc_cidr
 
   tags = {
@@ -105,6 +112,7 @@ resource "aws_subnet" "my_subnet" {
 }
 
 resource "aws_security_group" "my_sg" {
+  # checkov:skip=CKV2_AWS_5: SG is attached to VPC; Checkov flags it because no EC2/RDS consumer exists (LocalStack free tier does not support EC2). SG is intentionally defined for VPC-level network boundary.
   name        = "my-terraform-sg"
   description = "Security group managed by Terraform"
   vpc_id      = aws_vpc.my_vpc.id
