@@ -66,7 +66,6 @@ resource "aws_s3_bucket" "bucket" {
   # checkov:skip=CKV_AWS_18: Access logging adds S3 storage cost; not justified for lab environment
   # checkov:skip=CKV_AWS_144: Cross-region replication doubles cost; single-region acceptable for lab
   # checkov:skip=CKV_AWS_145: KMS CMK costs $1/key/month; AES256 SSE is enforced via aws_s3_bucket_server_side_encryption_configuration below
-  # checkov:skip=CKV2_AWS_61: Lifecycle configuration deferred to TODO #8 (lifecycle rules on critical resources)
   # checkov:skip=CKV2_AWS_62: Event notifications have no consumers in this lab; not applicable
   bucket = var.bucket_name
 
@@ -77,6 +76,14 @@ resource "aws_s3_bucket" "bucket" {
     ManagedBy   = "terraform"
     Service     = "terraform-lab"
   }, var.tags)
+
+  # WHY prevent_destroy? This bucket holds Terraform state. Accidental
+  # destruction would make all managed infrastructure unrecoverable
+  # without manual state reconstruction. Remove this flag explicitly
+  # if you intend to decommission the environment.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # WHY AES256 and not KMS? AES256 (SSE-S3) is free and encrypts
@@ -91,6 +98,12 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "bucket" {
       sse_algorithm = "AES256"
     }
   }
+
+  # WHY prevent_destroy? Destroying this resource disables encryption
+  # at rest on the state bucket — a security regression.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # WHY versioning? Terraform state files are critical. Versioning
@@ -101,6 +114,42 @@ resource "aws_s3_bucket_versioning" "bucket" {
   versioning_configuration {
     status = "Enabled"
   }
+
+  # WHY prevent_destroy? Destroying this disables versioning — all
+  # future state writes become unrecoverable if corrupted or deleted.
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# S3 lifecycle policy — automatically manages object versions to
+# control storage costs. WHY? Versioning without lifecycle rules
+# means old versions accumulate indefinitely, increasing storage cost.
+# These rules expire non-current versions after 90 days and clean up
+# incomplete multipart uploads after 7 days.
+resource "aws_s3_bucket_lifecycle_configuration" "bucket" {
+  bucket = aws_s3_bucket.bucket.id
+
+  rule {
+    id     = "expire-old-versions"
+    status = "Enabled"
+
+    # Clean up incomplete multipart uploads after 7 days.
+    # WHY? Failed uploads consume storage but are invisible in the console.
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+
+    # Expire non-current object versions after 90 days.
+    # WHY 90 days? Balances recovery window (enough time to notice
+    # and restore accidental deletions) against storage cost.
+    noncurrent_version_expiration {
+      noncurrent_days = 90
+    }
+  }
+
+  # Must be created after versioning is enabled
+  depends_on = [aws_s3_bucket_versioning.bucket]
 }
 
 # WHY all four settings? Each blocks a different attack vector:
@@ -116,6 +165,13 @@ resource "aws_s3_bucket_public_access_block" "bucket" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+
+  # WHY create_before_destroy? A gap in public access protection
+  # during replacement would briefly expose the bucket. New block
+  # must exist before old one is removed.
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # WHY a bucket policy for SSL? The public access block above prevents
@@ -146,6 +202,13 @@ resource "aws_s3_bucket_policy" "bucket_ssl" {
       }
     ]
   })
+
+  # WHY create_before_destroy? SSL enforcement must never have a gap.
+  # If the old policy is destroyed first, unencrypted requests would
+  # be briefly accepted.
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 ########################################
