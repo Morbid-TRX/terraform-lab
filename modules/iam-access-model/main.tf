@@ -2,10 +2,21 @@
 # IAM — Company-grade Access Model
 # Personas: Developer, CI/CD (OIDC), Admin, Auditor
 # Project: terraform-lab (local / dev / prod / aws)
+#
+# WHY 4 personas? Least-privilege principle — each persona gets
+# exactly what it needs, nothing more. This mirrors real enterprise
+# IAM design where different actors have different trust levels.
+#
+# WHY roles instead of users? Roles are assumed temporarily via
+# STS — no long-lived credentials to rotate or leak. Developers
+# assume roles via aws-vault; CI/CD assumes via OIDC federation.
 ###############################################################
 
 locals {
-  # All environment state buckets
+  # WHY hardcoded bucket ARNs? Terraform state buckets are created
+  # outside this module (chicken-and-egg problem — you need state
+  # storage before you can manage state). ARNs are stable and known
+  # at design time, so hardcoding is acceptable here.
   all_buckets = [
     "arn:aws:s3:::my-terraform-bucket",
     "arn:aws:s3:::dev-terraform-bucket",
@@ -14,13 +25,17 @@ locals {
   ]
   all_bucket_objects = [for b in local.all_buckets : "${b}/*"]
 
-  # Non-prod only (local + dev)
+  # Non-prod only (local + dev) — Developer can write here but not prod
   dev_buckets = [
     "arn:aws:s3:::my-terraform-bucket",
     "arn:aws:s3:::dev-terraform-bucket",
   ]
   dev_bucket_objects = [for b in local.dev_buckets : "${b}/*"]
 
+  # Single DynamoDB table handles locking for all environments.
+  # WHY one table? DynamoDB charges per table ($0 in free tier for
+  # low usage). Per-env locking is handled via LeadingKeys conditions
+  # on the table, not separate tables.
   dynamo_arn = "arn:aws:dynamodb:${var.aws_region}:${var.aws_account_id}:table/${var.dynamodb_table}"
 }
 
@@ -28,6 +43,10 @@ locals {
 # 1. DEVELOPER ROLE
 #    - Full access: local + dev
 #    - Read-only:   prod + aws
+#
+# WHY read-only on prod? Developers should never directly modify
+# production. All prod changes go through CI/CD (reviewed PR → merge
+# → pipeline). This enforces the process at the IAM level.
 ########################################
 
 resource "aws_iam_role" "developer" {
@@ -40,7 +59,7 @@ resource "aws_iam_role" "developer" {
 data "aws_iam_policy_document" "developer" {
   # checkov:skip=CKV_AWS_356: ec2:Describe* actions require Resource="*" per AWS IAM spec — describe actions do not support resource-level permissions. Scoped to region via aws:RequestedRegion condition.
 
-  # Full S3 access to dev/local buckets
+  # Full S3 access to dev/local buckets only
   statement {
     sid       = "DevS3Full"
     effect    = "Allow"
@@ -48,7 +67,7 @@ data "aws_iam_policy_document" "developer" {
     resources = concat(local.dev_buckets, local.dev_bucket_objects)
   }
 
-  # Read-only S3 access to prod/aws buckets
+  # Read-only on prod/aws — can inspect state but cannot modify it
   statement {
     sid     = "ProdS3ReadOnly"
     effect  = "Allow"
@@ -61,7 +80,10 @@ data "aws_iam_policy_document" "developer" {
     ]
   }
 
-  # DynamoDB lock — dev only (cannot lock prod)
+  # DynamoDB lock scoped to local/* and dev/* keys only.
+  # WHY LeadingKeys condition? DynamoDB lock keys follow the pattern
+  # "env/path/to/resource". Restricting by prefix prevents a developer
+  # from acquiring or breaking prod state locks.
   statement {
     sid    = "DevDynamoLock"
     effect = "Allow"
@@ -79,7 +101,9 @@ data "aws_iam_policy_document" "developer" {
     }
   }
 
-  # Core Terraform plan permissions (VPC, S3, SG, Subnet)
+  # ec2:Describe* requires Resource="*" — AWS does not support
+  # resource-level permissions for Describe actions. This is an
+  # AWS API limitation, not a misconfiguration.
   statement {
     sid    = "TerraformReadForPlan"
     effect = "Allow"
@@ -92,7 +116,9 @@ data "aws_iam_policy_document" "developer" {
     resources = ["*"]
   }
 
-  # Terraform apply — dev/local only
+  # Terraform apply scoped to a single region via condition.
+  # WHY region condition? Prevents accidental deploys to wrong regions
+  # and limits blast radius if credentials are ever compromised.
   statement {
     sid    = "TerraformApplyDev"
     effect = "Allow"
@@ -119,6 +145,8 @@ resource "aws_iam_policy" "developer" {
   tags   = var.tags
 }
 
+# Attach the policy to the role — separated from the policy resource
+# so each can be managed independently if needed later.
 resource "aws_iam_role_policy_attachment" "developer" {
   role       = aws_iam_role.developer.name
   policy_arn = aws_iam_policy.developer.arn
@@ -128,8 +156,16 @@ resource "aws_iam_role_policy_attachment" "developer" {
 # 2. CI/CD ROLE (GitHub Actions OIDC)
 #    - Deploy access to ALL environments
 #    - No long-lived credentials
+#
+# WHY OIDC instead of access keys? OIDC tokens are short-lived
+# (expire after the workflow run) and are scoped to a specific
+# repo. No secrets to store, rotate, or accidentally expose.
 ########################################
 
+# OIDC provider tells AWS to trust GitHub's token service.
+# WHY this thumbprint? It's the SHA1 fingerprint of GitHub's
+# OIDC TLS certificate. AWS uses it to validate tokens are
+# genuinely from GitHub Actions and not forged.
 resource "aws_iam_openid_connect_provider" "github" {
   url             = "https://token.actions.githubusercontent.com"
   client_id_list  = ["sts.amazonaws.com"]
@@ -144,6 +180,10 @@ resource "aws_iam_role" "cicd" {
   tags               = merge(var.tags, { Role = "cicd" })
 }
 
+# Trust policy — only GitHub Actions from this specific repo can assume this role.
+# WHY two conditions? "aud" validates the token audience (must be AWS STS).
+# "sub" validates the source repo — prevents other GitHub repos from
+# assuming this role even if they also use OIDC.
 data "aws_iam_policy_document" "assume_github_oidc" {
   statement {
     effect  = "Allow"
@@ -170,7 +210,7 @@ data "aws_iam_policy_document" "cicd" {
   # checkov:skip=CKV_AWS_111: Write access required for Terraform apply operations. Access is bounded by OIDC federation — no static credentials exist.
   # checkov:skip=CKV_AWS_356: EC2/S3 Describe and CreateTags actions require Resource="*" per AWS IAM spec. Terraform operations inherently need broad resource access within scoped account.
 
-  # Full state access across all environments
+  # CI/CD needs full state access across all envs to run terraform plan/apply
   statement {
     sid       = "CICDS3StateAll"
     effect    = "Allow"
@@ -178,7 +218,7 @@ data "aws_iam_policy_document" "cicd" {
     resources = concat(local.all_buckets, local.all_bucket_objects)
   }
 
-  # DynamoDB lock — all environments
+  # No LeadingKeys condition here — CI/CD manages all environments
   statement {
     sid    = "CICDDynamoLock"
     effect = "Allow"
@@ -191,7 +231,7 @@ data "aws_iam_policy_document" "cicd" {
     resources = [local.dynamo_arn]
   }
 
-  # Terraform plan + apply permissions
+  # Combined plan + apply permissions — CI/CD runs both in the pipeline
   statement {
     sid    = "CICDTerraformApplyAll"
     effect = "Allow"
@@ -206,12 +246,14 @@ data "aws_iam_policy_document" "cicd" {
       "s3:GetBucketPolicy",
       "s3:GetEncryptionConfiguration",
       "s3:GetBucketPublicAccessBlock",
+      # s3:PutBucketPolicy needed to apply SSL enforcement policy on buckets
       "s3:PutBucketPolicy",
     ]
     resources = ["*"]
   }
 
-  # Drift detector — read-only describe across all envs
+  # Drift detector runs as CI/CD — needs read access to compare
+  # actual AWS state against Terraform state
   statement {
     sid    = "DriftDetectorRead"
     effect = "Allow"
@@ -242,11 +284,19 @@ resource "aws_iam_role_policy_attachment" "cicd" {
 #    - Full access everywhere
 #    - IAM management included
 #    - Requires MFA
+#
+# WHY a separate admin role instead of root? Root account should
+# never be used for day-to-day operations. This role is the
+# break-glass persona — used only when CI/CD or Developer
+# roles don't have sufficient permissions for a task.
 ########################################
 
 resource "aws_iam_role" "admin" {
-  name               = "${var.prefix}-admin"
-  description        = "Infrastructure admin - full access, MFA required"
+  name        = "${var.prefix}-admin"
+  description = "Infrastructure admin - full access, MFA required"
+  # WHY assume_human_mfa and not assume_human? Admin is the most
+  # privileged role. MFA is enforced at the trust policy level —
+  # even if credentials are stolen, MFA prevents role assumption.
   assume_role_policy = data.aws_iam_policy_document.assume_human_mfa.json
   tags               = merge(var.tags, { Role = "admin" })
 }
@@ -257,7 +307,6 @@ data "aws_iam_policy_document" "admin" {
   # checkov:skip=CKV_AWS_111: Admin role requires write access by design (ec2:*, s3:*, dynamodb:*). MFA required; usage audited via CloudTrail.
   # checkov:skip=CKV_AWS_356: ec2:* and s3:* actions require Resource="*" for the admin persona. Access gated by MFA requirement in trust policy.
 
-  # Full S3 state access
   statement {
     sid       = "AdminS3Full"
     effect    = "Allow"
@@ -265,7 +314,6 @@ data "aws_iam_policy_document" "admin" {
     resources = concat(local.all_buckets, local.all_bucket_objects)
   }
 
-  # Full DynamoDB lock access
   statement {
     sid       = "AdminDynamoFull"
     effect    = "Allow"
@@ -273,7 +321,6 @@ data "aws_iam_policy_document" "admin" {
     resources = [local.dynamo_arn]
   }
 
-  # Full EC2 (VPC, Subnet, SG, etc.)
   statement {
     sid       = "AdminEC2Full"
     effect    = "Allow"
@@ -281,7 +328,9 @@ data "aws_iam_policy_document" "admin" {
     resources = ["*"]
   }
 
-  # IAM management (scoped to project prefix)
+  # WHY scoped to prefix? Even admin IAM management is restricted
+  # to resources named terraform-lab-*. This prevents accidental
+  # modification of IAM roles outside this project's scope.
   statement {
     sid    = "AdminIAMScoped"
     effect = "Allow"
@@ -314,6 +363,11 @@ resource "aws_iam_role_policy_attachment" "admin" {
 # 4. AUDITOR ROLE
 #    - Read-only across ALL environments
 #    - No write, no lock, no IAM changes
+#
+# WHY an Auditor persona? Compliance and security reviews require
+# read access to infrastructure state. Without a dedicated role,
+# reviewers would need Developer or Admin access — violating
+# least-privilege. Auditor can see everything but change nothing.
 ########################################
 
 resource "aws_iam_role" "auditor" {
@@ -327,6 +381,8 @@ data "aws_iam_policy_document" "auditor" {
   # checkov:skip=CKV_AWS_107: Auditor has iam:Get*/iam:List* for read-only auditing — required to review IAM posture. Explicit Deny statement blocks all writes including credential modification.
   # checkov:skip=CKV_AWS_356: Read-only Describe/Get/List actions require Resource="*" per AWS IAM spec. Explicit Deny statement in same policy prevents any write actions.
 
+  # Read all S3 metadata — needed to audit encryption, versioning,
+  # public access settings, and bucket policies
   statement {
     sid    = "AuditorS3ReadOnly"
     effect = "Allow"
@@ -341,6 +397,8 @@ data "aws_iam_policy_document" "auditor" {
     resources = concat(local.all_buckets, local.all_bucket_objects)
   }
 
+  # Read DynamoDB lock table — auditor can see who holds locks
+  # but cannot acquire or release them
   statement {
     sid    = "AuditorDynamoReadOnly"
     effect = "Allow"
@@ -362,6 +420,8 @@ data "aws_iam_policy_document" "auditor" {
     resources = ["*"]
   }
 
+  # IAM read access — auditor needs to review role policies,
+  # trust relationships, and attached permissions for compliance
   statement {
     sid    = "AuditorIAMReadOnly"
     effect = "Allow"
@@ -372,7 +432,11 @@ data "aws_iam_policy_document" "auditor" {
     resources = ["*"]
   }
 
-  # Explicit deny — no writes ever
+  # WHY an explicit Deny? Allow statements above could be
+  # misread as granting write access via wildcard actions.
+  # An explicit Deny overrides any Allow — even if a future
+  # policy accidentally grants write permissions to this role,
+  # this Deny ensures writes are always blocked. Deny wins.
   statement {
     sid    = "DenyAllWrites"
     effect = "Deny"
@@ -399,9 +463,14 @@ resource "aws_iam_role_policy_attachment" "auditor" {
 
 ########################################
 # SHARED: Assume role trust policies
+#
+# WHY separate trust policies? Trust policies (who can assume
+# the role) are separate from permission policies (what the role
+# can do). This separation allows reuse — both Developer and
+# Auditor use assume_human, but have completely different permissions.
 ########################################
 
-# Human users — basic assume (used by developer + auditor)
+# Basic human assume — no MFA required (Developer + Auditor)
 data "aws_iam_policy_document" "assume_human" {
   statement {
     effect  = "Allow"
@@ -413,7 +482,12 @@ data "aws_iam_policy_document" "assume_human" {
   }
 }
 
-# Admin assume — requires MFA
+# Admin assume — MFA required at trust policy level.
+# WHY here and not in the permission policy? Conditions on the
+# trust policy are evaluated at assume-role time. If MFA was
+# checked in the permission policy instead, a user could assume
+# the role without MFA and only fail on the first API call.
+# Checking at trust time prevents assumption entirely without MFA.
 data "aws_iam_policy_document" "assume_human_mfa" {
   statement {
     effect  = "Allow"

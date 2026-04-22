@@ -2,8 +2,15 @@
 # Compute Module — Reusable infrastructure for dev/prod/aws
 # Resources: S3 bucket (encrypted, versioned, SSL-enforced,
 # public-access blocked), VPC, Subnet
+#
+# WHY a module? dev, prod, and aws all need identical
+# infrastructure. A module enforces consistency and means
+# a security fix here applies to all environments at once.
 ###############################################################
 
+# Variables are declared inline (no separate variables.tf) because
+# this module is small and keeping them co-located makes it easier
+# to understand what the module expects without jumping between files.
 variable "environment" { type = string }
 variable "vpc_cidr" { type = string }
 variable "subnet_cidr" { type = string }
@@ -14,7 +21,12 @@ variable "tags" {
 }
 
 ########################################
-# S3 Bucket — state storage
+# S3 Bucket — Terraform state storage
+#
+# WHY so many sub-resources? AWS requires separate resources
+# for each S3 feature (versioning, encryption, public access,
+# policy). This is by design in the AWS Terraform provider v4+
+# to allow independent lifecycle management of each setting.
 ########################################
 
 resource "aws_s3_bucket" "bucket" {
@@ -24,6 +36,9 @@ resource "aws_s3_bucket" "bucket" {
   # checkov:skip=CKV2_AWS_61: Lifecycle configuration deferred to TODO #8 (lifecycle rules on critical resources)
   # checkov:skip=CKV2_AWS_62: Event notifications have no consumers in this lab; not applicable
   bucket = var.bucket_name
+
+  # merge() allows callers to inject extra tags (e.g. Project, Owner)
+  # while guaranteeing the baseline tags are always present
   tags = merge({
     Environment = var.environment
     ManagedBy   = "terraform"
@@ -31,7 +46,10 @@ resource "aws_s3_bucket" "bucket" {
   }, var.tags)
 }
 
-# Enforce server-side encryption (AES256)
+# WHY AES256 and not KMS? AES256 (SSE-S3) is free and encrypts
+# data at rest automatically. KMS (SSE-KMS) adds $1/key/month
+# and per-request costs — not justified for a lab project.
+# Both satisfy encryption-at-rest compliance requirements.
 resource "aws_s3_bucket_server_side_encryption_configuration" "bucket" {
   bucket = aws_s3_bucket.bucket.id
 
@@ -42,7 +60,9 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "bucket" {
   }
 }
 
-# Versioning — protects against accidental deletion/overwrite
+# WHY versioning? Terraform state files are critical. Versioning
+# allows recovery if state is accidentally corrupted or deleted.
+# Without it, a bad terraform apply could be unrecoverable.
 resource "aws_s3_bucket_versioning" "bucket" {
   bucket = aws_s3_bucket.bucket.id
   versioning_configuration {
@@ -50,7 +70,12 @@ resource "aws_s3_bucket_versioning" "bucket" {
   }
 }
 
-# Block all public access at bucket level
+# WHY all four settings? Each blocks a different attack vector:
+# block_public_acls       — prevents ACL-based public exposure
+# block_public_policy     — prevents bucket policy granting public access
+# ignore_public_acls      — ignores any existing public ACLs
+# restrict_public_buckets — blocks cross-account public access
+# All four must be true for complete public access prevention.
 resource "aws_s3_bucket_public_access_block" "bucket" {
   bucket = aws_s3_bucket.bucket.id
 
@@ -60,7 +85,11 @@ resource "aws_s3_bucket_public_access_block" "bucket" {
   restrict_public_buckets = true
 }
 
-# Deny any non-SSL requests to the bucket
+# WHY a bucket policy for SSL? The public access block above prevents
+# public access, but it doesn't enforce encryption in transit.
+# This policy explicitly denies any request where SecureTransport
+# is false — meaning unencrypted HTTP requests are rejected even
+# from authenticated AWS principals within the account.
 resource "aws_s3_bucket_policy" "bucket_ssl" {
   bucket = aws_s3_bucket.bucket.id
   policy = jsonencode({
@@ -77,6 +106,7 @@ resource "aws_s3_bucket_policy" "bucket_ssl" {
         ]
         Condition = {
           Bool = {
+            # aws:SecureTransport is true only for HTTPS requests
             "aws:SecureTransport" = "false"
           }
         }
@@ -86,12 +116,20 @@ resource "aws_s3_bucket_policy" "bucket_ssl" {
 }
 
 ########################################
-# VPC
+# VPC — isolated network boundary
+#
+# WHY a VPC per environment? Each environment gets its own
+# network boundary. Resources in different environments cannot
+# communicate by default, preventing accidental cross-env access.
 ########################################
 
 resource "aws_vpc" "vpc" {
   # checkov:skip=CKV2_AWS_11: VPC flow logging adds CloudWatch Logs ingestion cost; not justified for lab
   # checkov:skip=CKV2_AWS_12: Default SG hardening deferred — no resources use the default SG; explicit SG defined separately in local env
+
+  # CIDR passed as variable so each environment gets its own
+  # non-overlapping range (local: 10.0, dev: 10.1, prod: 10.2, aws: 10.3)
+  # This makes future VPC peering possible without conflicts.
   cidr_block = var.vpc_cidr
   tags = merge({
     Name        = "${var.environment}-vpc"
@@ -102,12 +140,19 @@ resource "aws_vpc" "vpc" {
 }
 
 ########################################
-# Subnet
+# Subnet — single AZ for lab simplicity
+#
+# WHY single AZ? Multi-AZ requires a NAT Gateway ($32/month)
+# or complex routing. For a lab with no EC2 workloads,
+# single AZ is sufficient and stays within Free Tier.
 ########################################
 
 resource "aws_subnet" "subnet" {
-  vpc_id            = aws_vpc.vpc.id
-  cidr_block        = var.subnet_cidr
+  vpc_id     = aws_vpc.vpc.id
+  cidr_block = var.subnet_cidr
+
+  # Pinned to ap-southeast-1a (Singapore). Change this if deploying
+  # to a different region — not all AZs exist in all regions.
   availability_zone = "ap-southeast-1a"
   tags = merge({
     Name        = "${var.environment}-subnet"
