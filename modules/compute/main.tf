@@ -11,13 +11,46 @@
 # Variables are declared inline (no separate variables.tf) because
 # this module is small and keeping them co-located makes it easier
 # to understand what the module expects without jumping between files.
-variable "environment" { type = string }
-variable "vpc_cidr" { type = string }
-variable "subnet_cidr" { type = string }
-variable "bucket_name" { type = string }
+variable "environment" {
+  type        = string
+  description = "Deployment environment (local, dev, prod, aws)"
+  validation {
+    condition     = contains(["local", "dev", "prod", "aws"], var.environment)
+    error_message = "environment must be one of: local, dev, prod, aws."
+  }
+}
+
+variable "vpc_cidr" {
+  type        = string
+  description = "CIDR block for the VPC (e.g. 10.0.0.0/16)"
+  validation {
+    condition     = can(cidrhost(var.vpc_cidr, 0))
+    error_message = "vpc_cidr must be a valid CIDR block (e.g. 10.0.0.0/16)."
+  }
+}
+
+variable "subnet_cidr" {
+  type        = string
+  description = "CIDR block for the subnet — must be within vpc_cidr"
+  validation {
+    condition     = can(cidrhost(var.subnet_cidr, 0))
+    error_message = "subnet_cidr must be a valid CIDR block (e.g. 10.0.1.0/24)."
+  }
+}
+
+variable "bucket_name" {
+  type        = string
+  description = "S3 bucket name — must follow AWS naming rules"
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9\\-]{1,61}[a-z0-9]$", var.bucket_name))
+    error_message = "bucket_name must be 3-63 chars, lowercase letters/numbers/hyphens only, and cannot start or end with a hyphen."
+  }
+}
+
 variable "tags" {
-  type    = map(string)
-  default = {}
+  type        = map(string)
+  description = "Tags to merge with default resource tags"
+  default     = {}
 }
 
 ########################################
