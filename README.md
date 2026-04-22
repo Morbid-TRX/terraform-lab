@@ -27,15 +27,19 @@ Provisions AWS-compatible infrastructure across isolated dev, prod, local, and r
 
 ## Tools & Technologies
 
-- **Terraform** — Infrastructure as Code
+- **Terraform** — Infrastructure as Code with reusable modules
 - **LocalStack** — local AWS cloud emulator (via Docker)
 - **Python** — drift detection, simulation, and alerting scripts
 - **Docker** — container runtime for LocalStack
 - **GitHub Actions** — CI/CD pipeline for automated drift checks and remediation
-- **tfsec** — Terraform security misconfiguration scanner
+- **tfsec** — Terraform security misconfiguration scanner (non-blocking)
+- **Checkov** — broader IaC security scanner with CIS/NIST/PCI-DSS coverage (blocking)
+- **Bandit** — Python security scanner for drift detection scripts
 - **Infracost** — cloud cost estimation integrated into CI pipeline
 - **Slack** — real-time alerts for drift, remediation, cost, and failures
 - **pre-commit** — automated code quality hooks on every commit
+- **gitleaks** — secret scanning on every commit
+- **aws-vault** — secure local AWS credential storage (OS keychain)
 - **Git** — version control with branch protection rules
 
 ## Project Structure
@@ -84,12 +88,14 @@ terraform-lab/
 Every push to `main` and daily at 8:00 AM UTC triggers the full pipeline:
 
 1. 💰 **Infracost** — estimates monthly AWS cost
-2. 🔒 **tfsec** — scans Terraform for security misconfigurations
-3. ☁️ **LocalStack** — spins up local AWS environment
-4. 🏗️ **Terraform Init + Apply** — provisions infrastructure
-5. 🔍 **Drift Detector** — checks for state mismatches
-6. 🔧 **Auto Remediation** — applies automatically on scheduled runs only
-7. 📢 **Slack Alert** — notifies with status, source, cost, and timestamp
+2. 🔒 **tfsec** — scans Terraform for security misconfigurations (non-blocking)
+3. 🛡️ **Checkov** — broader IaC security scan with compliance frameworks (blocking)
+4. 🐍 **Bandit** — Python security scan on drift detection scripts (blocking)
+5. ☁️ **LocalStack** — spins up local AWS environment
+6. 🏗️ **Terraform Init + Apply** — provisions infrastructure
+7. 🔍 **Drift Detector** — checks for state mismatches
+8. 🔧 **Auto Remediation** — applies automatically on scheduled runs only
+9. 📢 **Slack Alert** — notifies with status, source, cost, and timestamp
 
 ## Smart Remediation
 
@@ -185,14 +191,21 @@ Resources provisioned on AWS:
 
 ## Security
 
-- **tfsec** scans run automatically on every push
+- **tfsec** — scans run automatically on every push (non-blocking, reporting)
+- **Checkov** — blocking IaC scanner, 133 checks passing, 0 failing, 23 justified suppressions
+- **Bandit** — Python security scanner on drift detector and simulator scripts
+- **gitleaks** — secret scanning on every commit via pre-commit hook
 - Security group rules restricted to VPC CIDR only (no public ingress)
-- S3 bucket hardened with encryption, versioning, and public access blocking
+- S3 buckets hardened: AES256 encryption, versioning, public access blocking, SSL-only policy
+- S3 lifecycle rules: 90-day version expiry, 7-day multipart upload cleanup
+- `prevent_destroy` lifecycle on critical resources — accidental `terraform destroy` is blocked
+- Variable validation rules catch bad inputs at `terraform plan` time with clear error messages
 - IAM roles follow least-privilege principle per environment and persona
 - CI/CD uses OIDC — no long-lived AWS credentials in GitHub secrets
 - Admin role requires MFA enforcement via trust policy
 - Branch protection rules enforce PR reviews and passing CI before merge
-- Pre-commit hooks block malformed or insecure code before it reaches GitHub
+- Pre-commit hooks: terraform fmt, terraform validate, end-of-file-fixer, gitleaks, Checkov, Bandit
+- All security suppressions documented inline with justification comments
 
 ## State Management
 
@@ -282,11 +295,14 @@ pre-commit install
 ## Key Concepts Demonstrated
 
 - Multi-environment Infrastructure as Code with reusable Terraform modules
-- Parameterized infrastructure using variables and outputs
+- Parameterized infrastructure using variables, validation rules, and outputs
 - Local cloud emulation for cost-free development and testing
 - Automated drift detection mimicking enterprise SRE workflows
 - Smart remediation — automatic on schedule, manual approval on push
-- Security scanning with tfsec and hardened resource configurations
+- Defense-in-depth security scanning: tfsec + Checkov (IaC) + Bandit (Python) + gitleaks (secrets)
+- Variable validation rules catching bad inputs before they reach AWS
+- Lifecycle rules protecting critical resources from accidental destruction
+- S3 lifecycle configuration for automated storage cost management
 - Cost visibility with Infracost integrated into CI pipeline
 - Real-time Slack alerting with source tracking and MYT timestamps
 - Branch protection and pre-commit hooks for code quality enforcement
@@ -294,3 +310,4 @@ pre-commit install
 - CI/CD pipeline integration with GitHub Actions
 - Company-grade IAM access model with least-privilege, OIDC, and MFA enforcement
 - Validated on real AWS Free Tier with zero code modifications
+- Inline WHY comments explaining design decisions throughout all Terraform files
