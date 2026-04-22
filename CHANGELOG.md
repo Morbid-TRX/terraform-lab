@@ -8,8 +8,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-- CONTRIBUTING.md — contributor and workflow documentation
-- CHANGELOG.md — this file
+---
+
+## [0.6.0] - 2026-04-22
+
+### Added
+- Bandit Python security scanner for `drift_detector.py` and `drift_simulator.py`
+- Bandit pre-commit hook pinned to `1.9.4`
+- Bandit step in CI pipeline (`drift-check.yml`)
+- `.bandit` config file with justified skip list (B404, B603, B607, B310)
+- CONTRIBUTING.md — full contributor guide with prerequisites, branch workflow,
+  environment table, CI/CD pipeline table, and suppression instructions
+- CHANGELOG.md — versioned history from v0.1.0 onwards
+- Inline WHY comments across all `.tf` files explaining design decisions
+- Variable validation rules on compute module (environment, vpc_cidr,
+  subnet_cidr, bucket_name) and IAM access model module (prefix, aws_region,
+  aws_account_id, dynamodb_table, github_org, github_repo, human_principal_arns)
+- S3 lifecycle configuration on all buckets — 90-day non-current version
+  expiry, 7-day incomplete multipart upload cleanup
+- Terraform `lifecycle` blocks on critical resources:
+  - `prevent_destroy = true` on S3 bucket, versioning, and SSE configuration
+  - `create_before_destroy = true` on public access block, bucket policy, and security group
+
+### Fixed
+- Removed stale `CKV2_AWS_61` checkov:skip comments now that lifecycle
+  configuration is implemented
+
+### Security
+- Checkov score improved: 133 passed, 0 failed, 23 skipped (all justified)
+- Bad inputs now caught at `terraform plan` time with human-readable errors
+  instead of failing during apply with cryptic AWS API errors
+- Critical resources protected against accidental destruction via
+  `prevent_destroy` lifecycle rules
 
 ---
 
@@ -103,7 +133,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-[Unreleased]: https://github.com/Morbid-TRX/terraform-lab/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Morbid-TRX/terraform-lab/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Morbid-TRX/terraform-lab/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Morbid-TRX/terraform-lab/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Morbid-TRX/terraform-lab/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Morbid-TRX/terraform-lab/compare/v0.2.0...v0.3.0
