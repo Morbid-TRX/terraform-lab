@@ -53,6 +53,11 @@ jobs:
           soft_fail: false
           config_file: .checkov.yaml
 
+      - name: Run Bandit Python security scan
+        run: |
+          pip install bandit
+          bandit drift_detector.py drift_simulator.py --ini .bandit
+
       - name: Start LocalStack
         run: |
           pip install localstack

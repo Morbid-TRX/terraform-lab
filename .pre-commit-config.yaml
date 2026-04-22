@@ -26,3 +26,11 @@ repos:
           - --compact
           - --config-file
           - .checkov.yaml
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.4
+    hooks:
+      - id: bandit
+        args:
+          - --ini
+          - .bandit
+        files: ^(drift_detector|drift_simulator)\.py$

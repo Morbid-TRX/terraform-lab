@@ -15,3 +15,6 @@ Thumbs.db
 
 # Checkov
 checkov-report*.txt
+
+# Bandit
+bandit-report*.txt
