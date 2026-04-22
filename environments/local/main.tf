@@ -52,7 +52,6 @@ resource "aws_s3_bucket" "my_bucket" {
   # checkov:skip=CKV_AWS_18: Access logging adds S3 storage cost; not justified for LocalStack lab
   # checkov:skip=CKV_AWS_144: Cross-region replication not applicable to LocalStack single-endpoint setup
   # checkov:skip=CKV_AWS_145: KMS CMK costs $1/key/month; AES256 SSE enforced via aws_s3_bucket_server_side_encryption_configuration below
-  # checkov:skip=CKV2_AWS_61: Lifecycle configuration deferred to TODO #8 (lifecycle rules on critical resources)
   # checkov:skip=CKV2_AWS_62: Event notifications have no consumers in this lab; not applicable
   bucket = var.bucket_name
 
@@ -61,6 +60,12 @@ resource "aws_s3_bucket" "my_bucket" {
     Environment = "Dev"
     Service     = "terraform-lab"
     ManagedBy   = "terraform"
+  }
+
+  # WHY prevent_destroy? LocalStack state bucket holds local dev state.
+  # Accidental destruction requires full re-apply to restore.
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
@@ -71,6 +76,32 @@ resource "aws_s3_bucket_versioning" "my_bucket_versioning" {
   versioning_configuration {
     status = "Enabled"
   }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# S3 lifecycle policy — same rules as compute module.
+# WHY on LocalStack? LocalStack supports lifecycle configuration
+# and it keeps local env consistent with dev/prod/aws.
+resource "aws_s3_bucket_lifecycle_configuration" "my_bucket_lifecycle" {
+  bucket = aws_s3_bucket.my_bucket.id
+
+  rule {
+    id     = "expire-old-versions"
+    status = "Enabled"
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 90
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.my_bucket_versioning]
 }
 
 # AES256 (SSE-S3) encrypts all objects at rest automatically.
@@ -82,6 +113,10 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "my_bucket_encrypt
       sse_algorithm = "AES256"
     }
   }
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # All four settings required for complete public access prevention.
@@ -92,6 +127,10 @@ resource "aws_s3_bucket_public_access_block" "my_bucket_public_access" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Enforces encryption in transit. Denies any S3 request made
@@ -118,6 +157,10 @@ resource "aws_s3_bucket_policy" "my_bucket_ssl" {
       }
     ]
   })
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 ########################################
@@ -202,5 +245,11 @@ resource "aws_security_group" "my_sg" {
     Environment = "Dev"
     Service     = "terraform-lab"
     ManagedBy   = "terraform"
+  }
+
+  # WHY create_before_destroy? Network rules must not drop during
+  # updates. New SG is attached before old one is detached.
+  lifecycle {
+    create_before_destroy = true
   }
 }
