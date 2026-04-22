@@ -92,6 +92,9 @@ resource "aws_s3_bucket_lifecycle_configuration" "my_bucket_lifecycle" {
     id     = "expire-old-versions"
     status = "Enabled"
 
+    # filter {} required by AWS provider v4+ — applies rule to all objects
+    filter {}
+
     abort_incomplete_multipart_upload {
       days_after_initiation = 7
     }

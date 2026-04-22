@@ -53,6 +53,16 @@ variable "tags" {
   default     = {}
 }
 
+variable "availability_zone" {
+  type        = string
+  description = "Availability zone for the subnet — must match the provider region"
+  default     = "ap-southeast-1a"
+  validation {
+    condition     = can(regex("^[a-z]{2}-[a-z]+-[0-9][a-z]$", var.availability_zone))
+    error_message = "availability_zone must be a valid AZ format (e.g. ap-southeast-1a, us-east-1a)."
+  }
+}
+
 ########################################
 # S3 Bucket — Terraform state storage
 #
@@ -133,6 +143,11 @@ resource "aws_s3_bucket_lifecycle_configuration" "bucket" {
   rule {
     id     = "expire-old-versions"
     status = "Enabled"
+
+    # filter {} is required by AWS provider v4+ — empty filter means
+    # "apply this rule to all objects in the bucket". Without it,
+    # the provider warns this will become a hard error in future versions.
+    filter {}
 
     # Clean up incomplete multipart uploads after 7 days.
     # WHY? Failed uploads consume storage but are invisible in the console.
@@ -247,9 +262,9 @@ resource "aws_subnet" "subnet" {
   vpc_id     = aws_vpc.vpc.id
   cidr_block = var.subnet_cidr
 
-  # Pinned to ap-southeast-1a (Singapore). Change this if deploying
-  # to a different region — not all AZs exist in all regions.
-  availability_zone = "ap-southeast-1a"
+  # AZ passed as variable — defaults to ap-southeast-1a for real AWS.
+  # LocalStack ignores AZ entirely so any value works for local/dev/prod.
+  availability_zone = var.availability_zone
   tags = merge({
     Name        = "${var.environment}-subnet"
     Environment = var.environment
