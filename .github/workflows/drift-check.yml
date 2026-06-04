@@ -66,7 +66,15 @@ jobs:
             --name localstack \
             -e LOCALSTACK_AUTH_TOKEN=${{ secrets.LOCALSTACK_AUTH_TOKEN }} \
             localstack/localstack
-          sleep 15
+          echo "Waiting for LocalStack to be ready..."
+          for i in $(seq 1 30); do
+            if curl -s http://localhost:4566/_localstack/health | grep -q '"s3": "available"'; then
+              echo "LocalStack is ready after ${i} attempts"
+              break
+            fi
+            echo "Attempt ${i}/30 - not ready yet, waiting 3s..."
+            sleep 3
+          done
 
       - name: Terraform Init
         run: terraform init
