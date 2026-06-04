@@ -68,7 +68,9 @@ jobs:
             localstack/localstack
           echo "Waiting for LocalStack to be ready..."
           for i in $(seq 1 30); do
-            if curl -s http://localhost:4566/_localstack/health | grep -q '"s3": "available"'; then
+            HEALTH=$(curl -s http://localhost:4566/_localstack/health)
+            echo "Health response: $HEALTH"
+            if echo "$HEALTH" | grep -q '"s3": "available"'; then
               echo "LocalStack is ready after ${i} attempts"
               break
             fi
